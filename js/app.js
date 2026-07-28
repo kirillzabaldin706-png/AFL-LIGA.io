@@ -47,13 +47,15 @@ function closeAllModals() {
 
 async function loadAllData() {
   try {
-    const [teamsSnap, matchesSnap, newsSnap, adsSnap, playersSnap, totwSnap] = await Promise.all([
+    const [teamsSnap, matchesSnap, newsSnap, adsSnap, playersSnap, totwSnap, staffSnap, settingsSnap] = await Promise.all([
       db.ref("teams").once("value"),
       db.ref("matches").once("value"),
       db.ref("news").once("value"),
       db.ref("ads").once("value"),
       db.ref("players").once("value"),
-      db.ref("teamOfTheRound").once("value")
+      db.ref("teamOfTheRound").once("value"),
+      db.ref("staff").once("value"),
+      db.ref("settings").once("value")
     ]);
 
     const teams = Object.entries(teamsSnap.val() || {}).map(([id, t]) => ({ id, ...t }));
@@ -81,7 +83,19 @@ async function loadAllData() {
     renderNews(news);
     renderAds(ads);
     loadPredictions(matches, teams);
+    const staff = Object.entries(staffSnap.val() || {}).map(([id, s]) => ({ id, ...s }));
+    const settings = settingsSnap.val() || {};
+    // tournaments already loaded separately if needed
+    let tournaments = [];
+    try {
+      const ts = await db.ref("tournaments").once("value");
+      tournaments = Object.entries(ts.val() || {}).map(([id, x]) => ({ id, ...x }));
+    } catch(e) {}
+
     renderTeamOfTheRound(totw, players);
+    renderTournaments(tournaments);
+    renderStaff(staff);
+    applySiteSettings(settings);
     setTimeout(initScrollAnimations, 100);
   } catch (err) {
     console.error(err);
@@ -324,34 +338,26 @@ function autoSelectTeamOfTheRound(players) {
     else byPos.other.push(p);
   });
 
-  // Схема 1-3-4-3 (или сколько есть)
+  // Формат 8×8: 1-3-3-1
   const pick = (arr, n) => arr.slice(0, n);
   const selected = [];
   selected.push(...pick(byPos["Вратарь"], 1));
   selected.push(...pick(byPos["Защитник"], 3));
-  selected.push(...pick(byPos["Полузащитник"], 4));
-  selected.push(...pick(byPos["Нападающий"], 3));
+  selected.push(...pick(byPos["Полузащитник"], 3));
+  selected.push(...pick(byPos["Нападающий"], 1));
 
-  // Добираем лучших, если не хватает 11
   const ids = new Set(selected.map(p => p.id));
   for (const p of scored) {
-    if (selected.length >= 11) break;
-    if (!ids.has(p.id)) {
-      selected.push(p);
-      ids.add(p.id);
-    }
+    if (selected.length >= 8) break;
+    if (!ids.has(p.id)) { selected.push(p); ids.add(p.id); }
   }
-  // Если всё ещё мало — любых
   if (selected.length < 5) {
     for (const p of players) {
-      if (selected.length >= 11) break;
-      if (!ids.has(p.id)) {
-        selected.push({ ...p, score: 0 });
-        ids.add(p.id);
-      }
+      if (selected.length >= 8) break;
+      if (!ids.has(p.id)) { selected.push({ ...p, score: 0 }); ids.add(p.id); }
     }
   }
-  return selected.slice(0, 11);
+  return selected.slice(0, 8);
 }
 
 function renderTeamOfTheRound(totwList, players) {
@@ -392,35 +398,40 @@ function renderTeamOfTheRound(totwList, players) {
   });
 
   let html = "";
-  const renderCard = (p, i) => {
+  const renderCard = (p) => {
     const photo = getPlayerPhoto(p);
     const g = p.goals || 0, a = p.assists || 0;
     return `
-      <div class="totw-player fade-in" data-player-id="${p.id}">
-        ${i < 3 ? '<span class="totw-badge">★</span>' : ""}
+      <div class="pitch-player" data-player-id="${p.id}">
         <img src="${photo.url}" class="${photo.blurred ? "blurred" : ""}"
-             onerror="this.src='https://via.placeholder.com/64?text=?'">
-        <div class="name">${p.name}</div>
-        <div class="role">${p.position || ""} · ${p.teamName || ""}</div>
-        <div class="stats-mini">${g}Г · ${a}П</div>
+             onerror="this.src='https://via.placeholder.com/72?text=?'">
+        <div class="pname">${p.name}</div>
+        <div class="pstats">${g}Г · ${a}П</div>
       </div>`;
   };
 
-  let globalIdx = 0;
-  order.forEach(pos => {
-    if (!groups[pos].length) return;
-    html += `<div class="formation-label" style="grid-column:1/-1">${pos}</div>`;
-    groups[pos].forEach(p => {
-      html += renderCard(p, globalIdx++);
-    });
+  // Поле 8×8: сверху нападающие, потом ПЗ, защита, вратарь внизу
+  const lines = [
+    ["Нападающий", groups["Нападающий"]],
+    ["Полузащитник", groups["Полузащитник"]],
+    ["Защитник", groups["Защитник"]],
+    ["Вратарь", groups["Вратарь"]]
+  ];
+  lines.forEach(([label, arr]) => {
+    if (!arr.length) return;
+    html += `<div class="pitch-label">${label}</div><div class="pitch-line">`;
+    arr.forEach(p => { html += renderCard(p); });
+    html += `</div>`;
   });
-  groups[""].forEach(p => {
-    html += renderCard(p, globalIdx++);
-  });
+  if (groups[""].length) {
+    html += `<div class="pitch-line">`;
+    groups[""].forEach(p => { html += renderCard(p); });
+    html += `</div>`;
+  }
 
   container.innerHTML = html;
 
-  container.querySelectorAll(".totw-player[data-player-id]").forEach(el => {
+  container.querySelectorAll(".pitch-player[data-player-id]").forEach(el => {
     el.addEventListener("click", () => {
       const player = globalPlayers.find(p => p.id === el.dataset.playerId);
       if (player) openPlayerModal(player);
@@ -428,57 +439,73 @@ function renderTeamOfTheRound(totwList, players) {
   });
 }
 
-function renderTeamOfTheRound(totwList, players) {
-  const container = document.getElementById("totw-list");
-  const label = document.getElementById("totw-round-label");
-  if (!container) return;
 
-  // Берём последнюю (актуальную) команду тура
-  const sorted = [...(totwList || [])].sort((a, b) => (b.round || 0) - (a.round || 0));
-  const current = sorted[0];
-
-  if (!current || !current.players || !current.players.length) {
-    // Авто: топ игроков по голы+пасы
-    const top = [...players]
-      .map(p => ({ ...p, score: (p.goals || 0) * 2 + (p.assists || 0) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 11);
-    if (label) label.textContent = "По итогам текущего сезона";
-    container.innerHTML = top.map((p, i) => {
-      const photo = getPlayerPhoto(p);
-      return `
-        <div class="totw-player fade-in" data-player-id="${p.id}">
-          ${i < 3 ? `<span class="totw-badge">★</span>` : ""}
-          <img src="${photo.url}" class="${photo.blurred ? "blurred" : ""}"
-               onerror="this.src='https://via.placeholder.com/64?text=?'">
-          <div class="name">${p.name}</div>
-          <div class="role">${p.position || ""} · ${p.teamName || ""}</div>
-          <div class="stats-mini">${p.goals || 0}Г · ${p.assists || 0}П</div>
-        </div>
-      `;
-    }).join("");
-  } else {
-    if (label) label.textContent = current.title || `Тур ${current.round}`;
-    container.innerHTML = current.players.map((pid, i) => {
-      const p = players.find(pl => pl.id === pid) || { id: pid, name: "?", consent: false };
-      const photo = getPlayerPhoto(p);
-      return `
-        <div class="totw-player fade-in" data-player-id="${p.id}">
-          ${i < 3 ? `<span class="totw-badge">★</span>` : ""}
-          <img src="${photo.url}" class="${photo.blurred ? "blurred" : ""}"
-               onerror="this.src='https://via.placeholder.com/64?text=?'">
-          <div class="name">${p.name}</div>
-          <div class="role">${p.position || ""} · ${p.teamName || ""}</div>
-          <div class="stats-mini">${p.goals || 0}Г · ${p.assists || 0}П</div>
-        </div>
-      `;
-    }).join("");
+function renderTournaments(list) {
+  const el = document.getElementById("tournaments-list");
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = "<p style='text-align:center;opacity:0.5;grid-column:1/-1'>Турниры пока не добавлены</p>";
+    return;
   }
-
-  container.querySelectorAll(".totw-player[data-player-id]").forEach(el => {
-    el.addEventListener("click", () => {
-      const player = globalPlayers.find(p => p.id === el.dataset.playerId);
-      if (player) openPlayerModal(player);
-    });
-  });
+  el.innerHTML = list.map(t => `
+    <div class="tournament-card fade-in">
+      <h3>${t.name}</h3>
+      <div class="season">${t.season || ""}</div>
+      ${t.active ? '<span class="badge-active">Активен</span>' : ""}
+    </div>
+  `).join("");
 }
+
+// ========== ПЕРСОНАЛ ==========
+function renderStaff(list) {
+  const el = document.getElementById("staff-list");
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = "<p style='text-align:center;opacity:0.5;grid-column:1/-1'>Персонал пока не добавлен</p>";
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <div class="staff-card fade-in">
+      <img src="${s.photo || "https://via.placeholder.com/64?text=?"}" alt=""
+           onerror="this.src='https://via.placeholder.com/64?text=?'">
+      <div class="sname">${s.name}</div>
+      <div class="srole">${s.role || ""}</div>
+    </div>
+  `).join("");
+}
+
+// ========== ФОН / ЭМБЛЕМА ==========
+function applySiteSettings(settings) {
+  if (!settings) return;
+  if (settings.emblemUrl) {
+    document.body.classList.add("has-bg-emblem");
+    document.body.style.setProperty("--site-emblem", `url("${settings.emblemUrl}")`);
+  }
+  if (settings.siteTitle) {
+    const h = document.querySelector(".hero h1");
+    if (h) h.textContent = settings.siteTitle;
+  }
+}
+
+// ========== ПРЕДЛОЖЕНИЯ ==========
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("suggestForm")?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const name = document.getElementById("suggestName").value.trim();
+    const contact = document.getElementById("suggestContact").value.trim();
+    const text = document.getElementById("suggestText").value.trim();
+    if (!name || !contact || !text) return showToast("Заполните все поля", true);
+    try {
+      await db.ref("suggestions").push({
+        name, contact, text,
+        date: new Date().toISOString(),
+        read: false
+      });
+      showToast("Предложение отправлено!");
+      e.target.reset();
+    } catch (err) {
+      // fallback if rules block anonymous write - need open write for suggestions
+      showToast("Ошибка: " + err.message, true);
+    }
+  });
+});

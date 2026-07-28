@@ -1,9 +1,10 @@
 // ============================================
-// FIREBASE CONFIG — замени на свои данные
+// FIREBASE CONFIG
 // ============================================
 const firebaseConfig = {
   apiKey: "AIzaSyDwkGuJuGvIbWgbaaDBgrSXOP6psvazWnY",
   authDomain: "afl-liga.firebaseapp.com",
+  databaseURL: "https://afl-liga-default-rtdb.firebaseio.com",
   projectId: "afl-liga",
   storageBucket: "afl-liga.firebasestorage.app",
   messagingSenderId: "900382458173",
@@ -16,7 +17,7 @@ const db = firebase.database();
 const auth = firebase.auth();
 
 // ============================================
-// IMGBB API KEY — получи на https://api.imgbb.com/
+// IMGBB API KEY
 // ============================================
 const IMGBB_API_KEY = "7211b469b211fbe8eddf7285042eb17d";
 
@@ -52,9 +53,8 @@ function showToast(msg, isError = false) {
   setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
-// Хелпер: URL фото с учётом согласия
 function getPlayerPhoto(player) {
-  const placeholder = "https://via.placeholder.com/100x100?text=?";
+  const placeholder = "https://via.placeholder.com/120x120?text=?";
   if (!player) return { url: placeholder, blurred: true };
   const url = player.photo || placeholder;
   const blurred = !player.consent;

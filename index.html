@@ -24,6 +24,9 @@
       <a href="#totw">Команда тура</a>
       <a href="#teams">Команды</a>
       <a href="#news">Новости</a>
+      <a href="#tournaments">Турниры</a>
+      <a href="#staff">Персонал</a>
+      <a href="#suggest">Предложения</a>
       <button id="adminBtn" class="btn-admin">Админ-панель</button>
     </nav>
     <div class="burger" aria-label="Меню"><span></span><span></span><span></span></div>
@@ -109,7 +112,10 @@
       <div class="totw-header">
         <span id="totw-round-label" class="round-label">Загрузка...</span>
       </div>
-      <div id="totw-list" class="totw-grid"></div>
+      <div class="pitch" id="totw-pitch">
+        <div class="pitch-center-circle"></div>
+        <div id="totw-list"></div>
+      </div>
     </div>
   </section>
 
@@ -124,6 +130,34 @@
     <div class="container">
       <h2 class="section-title">Новости</h2>
       <div id="news-list" class="news-grid"></div>
+    </div>
+  </section>
+
+
+  <section id="tournaments" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Турниры</h2>
+      <div id="tournaments-list" class="tournaments-grid"></div>
+    </div>
+  </section>
+
+  <section id="staff" class="section">
+    <div class="container">
+      <h2 class="section-title">Персонал лиги</h2>
+      <div id="staff-list" class="staff-grid"></div>
+    </div>
+  </section>
+
+  <section id="suggest" class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Предложения</h2>
+      <p style="text-align:center;color:var(--text-muted);margin-bottom:24px;max-width:480px;margin-left:auto;margin-right:auto">Напишите идею или предложение. Укажите Telegram или другой контакт — мы ответим.</p>
+      <form id="suggestForm" class="suggest-form">
+        <div class="form-group"><label>Имя</label><input type="text" id="suggestName" required placeholder="Как к вам обращаться"></div>
+        <div class="form-group"><label>Контакт (Telegram / WhatsApp / email)</label><input type="text" id="suggestContact" required placeholder="@username или +7..."></div>
+        <div class="form-group"><label>Предложение</label><textarea id="suggestText" required placeholder="Ваша идея..."></textarea></div>
+        <button type="submit" class="btn-save" style="width:100%">Отправить</button>
+      </form>
     </div>
   </section>
 

@@ -1,5 +1,5 @@
 let currentUser = null;
-let cache = { teams: [], matches: [], players: [], news: [], ads: [], tournaments: [], totw: [] };
+let cache = { teams: [], matches: [], players: [], news: [], ads: [], tournaments: [], totw: [], staff: [], suggestions: [] };
 
 document.addEventListener("DOMContentLoaded", () => {
   auth.onAuthStateChanged(user => {
@@ -41,6 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupTournamentForm();
   setupTotwForm();
   setupPhotoPreviews();
+  setupStaffForm();
+  setupSettingsForm();
 });
 
 function showLogin() {
@@ -61,7 +63,10 @@ async function loadAdminData() {
       db.ref("news").once("value"),
       db.ref("ads").once("value"),
       db.ref("tournaments").once("value"),
-      db.ref("teamOfTheRound").once("value")
+      db.ref("teamOfTheRound").once("value"),
+      db.ref("staff").once("value"),
+      db.ref("suggestions").once("value"),
+      db.ref("settings").once("value")
     ]);
     cache.teams = Object.entries(snaps[0].val() || {}).map(([id, v]) => ({ id, ...v }));
     cache.matches = Object.entries(snaps[1].val() || {}).map(([id, v]) => ({ id, ...v }));
@@ -70,6 +75,13 @@ async function loadAdminData() {
     cache.ads = Object.entries(snaps[4].val() || {}).map(([id, v]) => ({ id, ...v }));
     cache.tournaments = Object.entries(snaps[5].val() || {}).map(([id, v]) => ({ id, ...v }));
     cache.totw = Object.entries(snaps[6].val() || {}).map(([id, v]) => ({ id, ...v }));
+    cache.staff = Object.entries(snaps[7]?.val() || {}).map(([id, v]) => ({ id, ...v }));
+    cache.suggestions = Object.entries(snaps[8]?.val() || {}).map(([id, v]) => ({ id, ...v }));
+    const settingsVal = snaps[9]?.val() || {};
+    if (document.getElementById("settingsTitle")) {
+      document.getElementById("settingsTitle").value = settingsVal.siteTitle || "";
+      document.getElementById("settingsEmblemUrl").value = settingsVal.emblemUrl || "";
+    }
 
     renderAdminTeams();
     renderAdminMatches();
@@ -78,6 +90,8 @@ async function loadAdminData() {
     renderAdminAds();
     renderAdminTournaments();
     renderAdminTotw();
+    renderAdminStaff();
+    renderAdminSuggestions();
     fillTeamSelects();
     fillTotwCheckboxes();
   } catch (err) {
@@ -628,4 +642,84 @@ function resetTotwForm() {
   document.getElementById("totwId").value = "";
   document.getElementById("totwFormTitle").textContent = "Добавить команду тура";
   fillTotwCheckboxes([]);
+}
+
+
+function setupStaffForm() {
+  document.getElementById("staffForm")?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const id = document.getElementById("staffId").value;
+    const name = document.getElementById("staffName").value.trim();
+    const role = document.getElementById("staffRole").value;
+    const teamId = document.getElementById("staffTeam")?.value || "";
+    const file = document.getElementById("staffPhoto")?.files[0];
+    if (!name) return showToast("Введите имя", true);
+    let photo = document.getElementById("staffPhotoUrl").value;
+    if (file) { showToast("Загрузка..."); photo = await uploadToImgbb(file) || photo; }
+    const data = { name, role, teamId, photo: photo || "" };
+    try {
+      if (id) await db.ref("staff/" + id).update(data);
+      else await db.ref("staff").push(data);
+      showToast("Сохранено");
+      document.getElementById("staffForm").reset();
+      document.getElementById("staffId").value = "";
+      await loadAdminData();
+    } catch (err) { showToast(err.message, true); }
+  });
+}
+
+function renderAdminStaff() {
+  const tbody = document.querySelector("#adminStaffTable tbody");
+  if (!tbody) return;
+  tbody.innerHTML = cache.staff.map(s => `
+    <tr>
+      <td><img src="${s.photo || "https://via.placeholder.com/34"}"></td>
+      <td>${s.name}</td>
+      <td>${s.role || ""}</td>
+      <td>
+        <button class="btn-danger" onclick="deleteItem('staff','${s.id}')">✕</button>
+      </td>
+    </tr>
+  `).join("") || "<tr><td colspan='4' style='text-align:center;opacity:.5'>Пусто</td></tr>";
+}
+
+function setupSettingsForm() {
+  document.getElementById("settingsEmblem")?.addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (f) {
+      const prev = document.getElementById("settingsEmblemPreview");
+      if (prev) { prev.src = URL.createObjectURL(f); prev.style.display = "block"; }
+    }
+  });
+  document.getElementById("settingsForm")?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const siteTitle = document.getElementById("settingsTitle").value.trim();
+    const file = document.getElementById("settingsEmblem")?.files[0];
+    let emblemUrl = document.getElementById("settingsEmblemUrl").value;
+    if (file) {
+      showToast("Загрузка эмблемы...");
+      emblemUrl = await uploadToImgbb(file) || emblemUrl;
+    }
+    try {
+      await db.ref("settings").update({ siteTitle, emblemUrl: emblemUrl || "" });
+      document.getElementById("settingsEmblemUrl").value = emblemUrl || "";
+      showToast("Оформление сохранено");
+    } catch (err) { showToast(err.message, true); }
+  });
+}
+
+function renderAdminSuggestions() {
+  const tbody = document.querySelector("#adminSuggestionsTable tbody");
+  if (!tbody) return;
+  tbody.innerHTML = cache.suggestions
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map(s => `
+      <tr>
+        <td>${s.date ? new Date(s.date).toLocaleString("ru-RU") : "—"}</td>
+        <td>${s.name || ""}</td>
+        <td>${s.contact || ""}</td>
+        <td style="max-width:240px;white-space:normal">${s.text || ""}</td>
+        <td><button class="btn-danger" onclick="deleteItem('suggestions','${s.id}')">✕</button></td>
+      </tr>
+    `).join("") || "<tr><td colspan='5' style='text-align:center;opacity:.5'>Нет предложений</td></tr>";
 }
