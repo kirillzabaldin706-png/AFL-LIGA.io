@@ -5,12 +5,13 @@ const firebaseConfig = {
   apiKey: "AIzaSyDwkGuJuGvIbWgbaaDBgrSXOP6psvazWnY",
   authDomain: "afl-liga.firebaseapp.com",
   projectId: "afl-liga",
+  // ↓↓↓ ДОБАВЬТЕ ЭТУ СТРОКУ (замените на ваш реальный URL из консоли) ↓↓↓
+  databaseURL: "https://afl-liga-default-rtdb.firebaseio.com", 
   storageBucket: "afl-liga.firebasestorage.app",
   messagingSenderId: "900382458173",
   appId: "1:900382458173:web:901c6573a400c1623c4554",
   measurementId: "G-KJEGKKP6KJ"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
